@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Labor Locations</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mining Safety System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <nav class="navbar">
+        <div class="logo"><img src="{{ url_for('static', filename='./images/logo.png') }}" alt="MiningSafe Logo"></div>
+        <ul class="nav-links">
+            <li><a href="/" id="logoutLink">logout</a></li>
+        </ul>
+    </nav>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location Alert and Navigation</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        #map {
+            height: 400px;
+            width: 100%;
+        }
+
+        #customDialog {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px;
+            background: white;
+            border: 1px solid #ccc;
+            z-index: 1000;
+        }
+
+        body {
+            /* text-align: center; */
+            margin: 0;
+            padding: 0;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        .navbar {
+            /* Add styles for your navigation bar */
+        }
+
+        /* Add other styles if needed */
+    </style>
+    <!-- Replace 'YOUR_API_KEY' with your actual Google Maps JavaScript API key -->
+</head>
+
+<body>
+    <nav class="navbar">
+        <!-- Navigation content -->
+    </nav>
+
+    <!-- <button id="requestLocation">Use My Location</button> -->
+    <div id="customDialog">
+        <p>We need access to your location for navigation purposes.</p>
+        <button id="proceed">OK</button>
+        <button id="cancel">Cancel</button>
+    </div>
+    <h2>Your Current Location</h2>
+    <div id="map"></div>
+
+    <script>
+        let map, directionsService, directionsRenderer, alertReceived = false, userPos = null;
+
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 18.577333976285335, lng: 73.98350238853541 },
+                zoom: 8
+            });
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer();
+            directionsRenderer.setMap(map);
+        }
+
+        function showError(error) {
+            // Define your error handling logic here
+            console.error('Geolocation error:', error);
+        }
+
+        function updateLocation() {
+            navigator.geolocation.getCurrentPosition(position => {
+                userPos = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                    username: sessionStorage.getItem('username')
+                };
+                console.log("latitute:\t"+position.coords.latitude+ "longitude:"+ position.coords.longitude)
+                if (!alertReceived) {
+                    fetch('/api/updateLocation', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(userPos)
+                    })
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('Failed to update location');
+                            }
+                            updateMapPosition(userPos); // Update map position with the new location
+                        })
+                        .catch(showError);
+                }
+            }, showError);
+        }
+
+        function displayRoute(start, end) {
+            directionsService.route({
+                origin: start,
+                destination: end,
+                travelMode: 'DRIVING'
+            }, (response, status) => {
+                if (status === 'OK') {
+                    directionsRenderer.setDirections(response);
+                } else {
+                    window.alert('Directions request failed due to ' + status);
+                }
+            });
+        }
+
+        function updateMapPosition(position) {
+            const newPos = new google.maps.LatLng(position.lat, position.lng);
+            map.setCenter(newPos);
+            if (!map.marker) {
+                map.marker = new google.maps.Marker({
+                    position: newPos,
+                    map: map,
+                });
+            } else {
+                map.marker.setPosition(newPos);
+            }
+        }
+
+        document.getElementById('requestLocation').addEventListener('click', function () {
+            document.getElementById('customDialog').style.display = 'block';
+        });
+
+        document.getElementById('proceed').addEventListener('click', function () {
+            document.getElementById('customDialog').style.display = 'none';
+            initMap();
+            updateLocation();
+            setInterval(checkForAlerts, 5000); // Check for alerts every 5 seconds
+        });
+
+        document.getElementById('cancel').addEventListener('click', function () {
+            document.getElementById('customDialog').style.display = 'none';
+        });
+
+        function checkForAlerts() {
+            const username = sessionStorage.getItem('username');
+            fetch(`/signalService?username=${username}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.alertSignal) {
+                        if (!alertReceived) {
+                            alertReceived = true;
+                            displayRoute(userPos, { lat: 18.573408892932463, lng: 73.98211820675523});//headgate route coordinates values need to add from DB
+                        }
+                    } else if (alertReceived) { // If the alert is resolved
+                        alertReceived = false;
+                        directionsRenderer.setDirections({ routes: [] }); // Clear the current route
+                        updateLocation(); // Optionally, update the user's location on the map
+                    }
+                })
+                .catch(error => console.error('Error checking for alert signal:', error));
+        }
+
+        // Continue to check for alerts every 30 seconds
+        setInterval(checkForAlerts, 30000);
+
+        // Update user's location every 30 seconds only if alertReceived is false
+        setInterval(() => {
+            if (!alertReceived) {
+                updateLocation();
+            }
+        }, 30000);
+    </script>
+    <script>
+        function onLoadFunction() {
+            initMap();
+            updateLocation();
+            setInterval(checkForAlerts, 5000);
+        }
+
+        window.onload = onLoadFunction;
+        window.addEventListener('load', function () {
+            onLoadFunction();
+            // Any other functions you wish to run on page load
+        });
+    </script>
+    <script>
+        function logout(event) {
+            event.preventDefault(); // Prevent the default link behavior
+
+            // Your logout logic here
+            console.log('Performing logout operations');
+            window.alert("Performing logout operations");
+            fetch('/api/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    'username': sessionStorage.getItem('username') })
+            }).then(response => {
+                if (response.ok) return response.json();
+                throw new Error('Problem in logout');
+            }).then(data => {
+                window.location.href = '/'; // Navigate to location page
+            }).catch(error => {
+                alert(error.message);
+            });
+
+            // Redirect to homepage or login page after logout operations
+            window.location.href = '/';
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('logoutLink').addEventListener('click', logout);
+        });
+    </script>
+    <!-- Ensure to replace 'YOUR_API_KEY' with your actual API key -->
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDv7GqSxnOa5E_YCWliTRUl_G26jYUnfik&callback=initMap"></script>
+</body>
+
+</html>

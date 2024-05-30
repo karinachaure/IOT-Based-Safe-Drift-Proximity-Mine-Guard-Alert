@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Labor Locations</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mining Safety System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <nav class="navbar">
+        <div class="logo"><img src="{{ url_for('static', filename='./images/logo.png') }}" alt="MiningSafe Logo"></div>
+        <ul class="nav-links">
+            <li><a href="/location">Map</a></li>
+            <li><a href="#about">About</a></li>
+            <li><a href="#contact">Contact</a></li>
+            <li><a href="/">logout</a></li>
+        </ul>
+    </nav>
+
+    <script
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDv7GqSxnOa5E_YCWliTRUl_G26jYUnfik&callback=initMap&libraries=&v=weekly"
+        async defer></script>
+    <script>
+        let map;
+
+        function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: 18.61988633365001, lng: 73.73661475723753}, // Default center, update as needed particular area coordinates from google map
+                zoom: 18,
+            });
+
+            fetchLaborLocations();
+            // setInterval(initMap, 8000); 
+            //setInterval(fetchLaborLocations, 10000); 
+            setInterval(function() { window.location.reload(); }, 10000);
+        }
+
+        function fetchLaborLocations() {
+            fetch('/api/locations')
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(labor => {
+                        const position = { lat: labor.latitude, lng: labor.longitude };
+                        let icon;
+                        if (labor.isLocation) {
+                           
+                            icon = {
+                                path: google.maps.SymbolPath.CIRCLE, // Use a circle shape if isLocation is true
+                                scale: 100, // Size of the circle
+                                fillColor: labor.color, // Fill color of the circle
+                                fillOpacity: .1, // Fill opacity of the circle
+                                strokeWeight: 1, // Border width of the circle
+                                strokeColor: "#FFFFFF", // Border color of the circle
+                            };
+                        } else { 
+                            icon = {
+                                path: google.maps.SymbolPath.BACKWARD_OPEN_ARROW, // Use a circle shape if isLocation is true
+                                scale: 3, // Size of the circle
+                                fillColor: labor.color, // Fill color of the circle
+                                fillOpacity: 1, // Fill opacity of the circle
+                                strokeWeight: 1, // Border width of the circle
+                                strokeColor: "#FFFFFF", // Border color of the circle}; // Use the default marker icon if isLocation is false or not defined
+                            };
+                        }
+                       console.log("latitude:"+labor.latitude + "longitude:"+labor.longitude+"ID:\t"+labor.id)
+                        new google.maps.Marker({
+                            position: position,
+                            map: map,
+                            title: ` ${labor.id}`,
+                            icon: icon,
+                        });
+                    });
+                })
+                .catch(error => console.error('Error fetching labor locations:', error));
+        }
+    </script>
+</head>
+
+<body onload="initMap()">
+    <div id="map" style="height: 500px; width: 100%;"></div>
+</body>
+
+</html>
